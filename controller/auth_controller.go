@@ -16,7 +16,7 @@ type AuthController struct {
 	challenges map[string]map[string]string // userId -> challenge -> platform
 }
 
-// /authorize?provider=google&user_id=alice[&platform=desktop&challenge=xyz]
+// /authorize?provider=google&user_id=alice[&scheme=myapp&platform=desktop&challenge=xyz]
 func (c *AuthController) Authorize(w http.ResponseWriter, r *http.Request) {
 	provider := r.URL.Query().Get("provider")
 	userID := r.URL.Query().Get("user_id")
@@ -25,6 +25,7 @@ func (c *AuthController) Authorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	scheme := r.URL.Query().Get("scheme")
 	platform := r.URL.Query().Get("platform")
 	challenge := r.URL.Query().Get("challenge")
 	if challenge != "" {
@@ -40,7 +41,7 @@ func (c *AuthController) Authorize(w http.ResponseWriter, r *http.Request) {
 	//log.Printf("auth challenge: %s", challenge)
 	//log.Println(c.challenges)
 
-	url, err := c.Service.GetAuthURL(provider, userID, platform)
+	url, err := c.Service.GetAuthURL(provider, userID, platform, scheme)
 	if err != nil {
 		http.Error(w, "error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -48,14 +49,14 @@ func (c *AuthController) Authorize(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, url, http.StatusFound)
 }
 
-// /callback?state=provider:user_id:platform&code=xxx
+// /callback?state=provider:user_id:platform:scheme&code=xxx
 func (c *AuthController) Callback(w http.ResponseWriter, r *http.Request) {
-	parts := strings.SplitN(r.URL.Query().Get("state"), ":", 3)
-	if len(parts) != 3 || parts[0] == "" || parts[1] == "" {
+	parts := strings.SplitN(r.URL.Query().Get("state"), ":", 4)
+	if len(parts) != 4 || parts[0] == "" || parts[1] == "" {
 		http.Error(w, "invalid state", http.StatusBadRequest)
 		return
 	}
-	provider, userID, platform := parts[0], parts[1], parts[2]
+	provider, userID, platform, scheme := parts[0], parts[1], parts[2], parts[3]
 	code := r.URL.Query().Get("code")
 
 	if err := c.Service.HandleCallback(provider, userID, code); err != nil {
@@ -70,8 +71,8 @@ func (c *AuthController) Callback(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "generate jwt failed", http.StatusInternalServerError)
 		}
 		// 2. 重定向到 App 的 Deep Link
-		redirect := fmt.Sprintf("incontrolchat://auth/callback?jwt=%s&provider=%s&user=%s",
-			jwtToken, provider, userID)
+		redirect := fmt.Sprintf("%s://auth/callback?jwt=%s&provider=%s&user=%s",
+			scheme, jwtToken, provider, userID)
 		http.Redirect(w, r, redirect, http.StatusFound)
 	} else {
 		// 桌面应用不支持从浏览器跳回应用

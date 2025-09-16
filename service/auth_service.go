@@ -22,13 +22,13 @@ func (s *AuthService) InitDB() {
 }
 
 // 生成授权 URL
-func (s *AuthService) GetAuthURL(provider, userID, platform string) (string, error) {
+func (s *AuthService) GetAuthURL(provider, userID, platform, scheme string) (string, error) {
 	client, err := model.GetOAuthClient(s.DB, provider)
 	if err != nil {
 		return "", err
 	}
 	conf := client.ToConfig()
-	state := fmt.Sprintf("%s:%s:%s", provider, userID, platform)
+	state := fmt.Sprintf("%s:%s:%s:%s", provider, userID, platform, scheme)
 	return conf.AuthCodeURL(
 		state,
 		oauth2.AccessTypeOffline,
