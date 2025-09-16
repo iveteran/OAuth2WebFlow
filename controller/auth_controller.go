@@ -70,7 +70,8 @@ func (c *AuthController) Callback(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "generate jwt failed", http.StatusInternalServerError)
 		}
 		// 2. 重定向到 App 的 Deep Link
-		redirect := fmt.Sprintf("myapp://auth/callback?jwt=%s&provider=%s", jwtToken, provider)
+		redirect := fmt.Sprintf("incontrolchat://auth/callback?jwt=%s&provider=%s&user=%s",
+			jwtToken, provider, userID)
 		http.Redirect(w, r, redirect, http.StatusFound)
 	} else {
 		// 桌面应用不支持从浏览器跳回应用
