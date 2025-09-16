@@ -87,7 +87,9 @@ func (c *AuthController) GetToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var userID string
+	var challenge string
 	userVerified := false
+	usingJwt := false
 	var jwtToken string
 	// 从 Authorization: Bearer <token> 中取出 token
 	auth := r.Header.Get("Authorization")
@@ -101,28 +103,18 @@ func (c *AuthController) GetToken(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		userVerified = true
+		usingJwt = true
 	} else {
 		// 2. 如果用户没有提供JWT，说明App没有(或不支持)通过Deep Link获取到JWT，就用challenge验证用户
 		userID = r.URL.Query().Get("user_id")
-		challenge := r.URL.Query().Get("challenge")
-		//log.Printf("gettoken userID: %s", userID)
-		//log.Printf("gettoken challenge: %s", challenge)
+		challenge = r.URL.Query().Get("challenge")
+		//log.Printf("getToken userID: %s", userID)
+		//log.Printf("getToken challenge: %s", challenge)
 		//log.Println(c.challenges)
 		if userID != "" && challenge != "" && c.challenges != nil {
 			if userChallenges, exists := c.challenges[userID]; exists && userChallenges != nil {
 				if _, exists2 := userChallenges[challenge]; exists2 {
 					userVerified = true
-					// 签发 JWT（有效期 24 小时）
-					var err error
-					jwtToken, err = util.GenerateJWT(userID, 24*time.Hour)
-					if err != nil {
-						http.Error(w, "generate jwt failed", http.StatusInternalServerError)
-					}
-					// challenge只用一次，如果为用户生成了JWT，后续就用JWT验证用户
-					delete(c.challenges[userID], challenge)
-					if len(c.challenges[userID]) == 0 {
-						delete(c.challenges, userID)
-					}
 				}
 			}
 		}
@@ -136,6 +128,19 @@ func (c *AuthController) GetToken(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "get token error: "+err.Error(), http.StatusInternalServerError)
 		return
+	}
+	if !usingJwt {
+		// 签发 JWT（有效期 24 小时）
+		var err error
+		jwtToken, err = util.GenerateJWT(userID, 24*time.Hour)
+		if err != nil {
+			http.Error(w, "generate jwt failed", http.StatusInternalServerError)
+		}
+		// challenge只用一次，如果为用户生成了JWT，后续就用JWT验证用户
+		delete(c.challenges[userID], challenge)
+		if len(c.challenges[userID]) == 0 {
+			delete(c.challenges, userID)
+		}
 	}
 	resp := map[string]any{
 		"access_token": token.AccessToken,
