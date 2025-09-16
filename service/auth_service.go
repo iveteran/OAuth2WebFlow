@@ -29,7 +29,12 @@ func (s *AuthService) GetAuthURL(provider, userID, platform string) (string, err
 	}
 	conf := client.ToConfig()
 	state := fmt.Sprintf("%s:%s:%s", provider, userID, platform)
-	return conf.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.ApprovalForce), nil
+	return conf.AuthCodeURL(
+		state,
+		oauth2.AccessTypeOffline,
+		oauth2.ApprovalForce,
+		oauth2.SetAuthURLParam("login_hint", userID),
+	), nil
 }
 
 // 处理回调
