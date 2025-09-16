@@ -143,10 +143,12 @@ func (c *AuthController) GetToken(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	resp := map[string]any{
-		"access_token": token.AccessToken,
-		"token_type":   token.TokenType,
-		"expiry":       token.Expiry,
-		"jwt":          jwtToken,
+		"access_token":  token.AccessToken,
+		"refresh_token": token.RefreshToken,
+		"token_type":    token.TokenType,
+		"expires_in":    token.ExpiresIn,
+		"expiry":        token.Expiry,
+		"jwt":           jwtToken,
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
