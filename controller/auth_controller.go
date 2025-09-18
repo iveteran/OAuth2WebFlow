@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/iveteran/OAuth2WebFlow/service"
+	"golang.org/x/oauth2"
 )
 
 type AuthController struct {
@@ -14,7 +15,7 @@ type AuthController struct {
 	challenges map[string]map[string]string // userId -> challenge -> platform
 }
 
-// /authorize?provider=google&user_id=alice[&scheme=myapp&platform=desktop&challenge=xyz]
+// /authorize?provider=google&user_id=alice[&scheme=myapp&platform=desktop&challenge=xyz&cacheMode=none]
 func (c *AuthController) Authorize(w http.ResponseWriter, r *http.Request) {
 	provider := r.URL.Query().Get("provider")
 	userID := r.URL.Query().Get("user_id")
@@ -35,8 +36,12 @@ func (c *AuthController) Authorize(w http.ResponseWriter, r *http.Request) {
 		}
 		c.challenges[userID][challenge] = platform
 	}
+	cacheMode := r.URL.Query().Get("cacheMode")
+	if cacheMode == "" {
+		cacheMode = "none"
+	}
 
-	url, err := c.Service.GetAuthURL(provider, userID, platform, scheme)
+	url, err := c.Service.GetAuthURL(provider, userID, platform, scheme, cacheMode)
 	if err != nil {
 		http.Error(w, "error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -44,19 +49,27 @@ func (c *AuthController) Authorize(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, url, http.StatusFound)
 }
 
-// /callback?state=provider:user_id:platform:scheme&code=xxx
+// /callback?state=provider:user_id:platform:scheme:cacheMode&code=xxx
 func (c *AuthController) Callback(w http.ResponseWriter, r *http.Request) {
-	parts := strings.SplitN(r.URL.Query().Get("state"), ":", 4)
-	if len(parts) != 4 || parts[0] == "" || parts[1] == "" {
+	code := r.URL.Query().Get("code")
+	parts := strings.SplitN(r.URL.Query().Get("state"), ":", 5)
+	if len(parts) != 5 || parts[0] == "" || parts[1] == "" {
 		http.Error(w, "invalid state", http.StatusBadRequest)
 		return
 	}
-	provider, userID, platform, scheme := parts[0], parts[1], parts[2], parts[3]
-	code := r.URL.Query().Get("code")
+	provider, userID, platform, scheme, cacheMode :=
+		parts[0], parts[1], parts[2], parts[3], parts[4]
 
-	if err := c.Service.HandleCallback(provider, userID, code); err != nil {
-		http.Error(w, "callback error: "+err.Error(), http.StatusInternalServerError)
-		return
+	if strings.EqualFold(cacheMode, "persistence") {
+		if err := c.Service.HandleCallback(provider, userID, code); err != nil {
+			http.Error(w, "callback error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	} else {
+		if err := c.Service.HandleCallbackWithoutStore(provider, userID, code); err != nil {
+			http.Error(w, "callback error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	if platform == "ios" || platform == "android" {
@@ -92,10 +105,21 @@ func (c *AuthController) GetToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := c.Service.GetAccessToken(provider, userID)
-	if err != nil {
-		http.Error(w, "get token error: "+err.Error(), http.StatusInternalServerError)
-		return
+	var token *oauth2.Token
+	var err error
+	cacheMode := r.URL.Query().Get("cacheMode")
+	if cacheMode == "persistence" {
+		token, err = c.Service.GetAccessToken(provider, userID)
+		if err != nil {
+			http.Error(w, "get token error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	} else {
+		token, err = c.Service.GetAccessTokenWithoutStore(provider, userID)
+		if err != nil {
+			http.Error(w, "get token error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 	resp := map[string]any{
 		"access_token":  token.AccessToken,
