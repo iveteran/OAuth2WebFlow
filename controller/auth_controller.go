@@ -5,10 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/iveteran/OAuth2WebFlow/service"
-	"github.com/iveteran/OAuth2WebFlow/util"
 )
 
 type AuthController struct {
@@ -65,14 +63,8 @@ func (c *AuthController) Callback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if platform == "ios" || platform == "android" {
-		// 1. 签发 JWT（有效期 24 小时）
-		jwtToken, err := util.GenerateJWT(userID, 24*time.Hour)
-		if err != nil {
-			http.Error(w, "generate jwt failed", http.StatusInternalServerError)
-		}
-		// 2. 重定向到 App 的 Deep Link
-		redirect := fmt.Sprintf("%s://auth/callback?jwt=%s&provider=%s&user=%s",
-			scheme, jwtToken, provider, userID)
+		redirect := fmt.Sprintf("%s://auth/callback?provider=%s&user=%s",
+			scheme, provider, userID)
 		http.Redirect(w, r, redirect, http.StatusFound)
 	} else {
 		// 桌面应用不支持从浏览器跳回应用
@@ -90,33 +82,16 @@ func (c *AuthController) GetToken(w http.ResponseWriter, r *http.Request) {
 	var userID string
 	var challenge string
 	userVerified := false
-	usingJwt := false
-	var jwtToken string
-	// 从 Authorization: Bearer <token> 中取出 token
-	auth := r.Header.Get("Authorization")
-	if auth != "" && len(auth) > 7 && auth[:7] == "Bearer " {
-		// 1. 用JWT验证用户
-		jwtStr := auth[7:]
-		var err error
-		userID, err = util.ValidateJWT(jwtStr)
-		if err != nil {
-			http.Error(w, "invalid token: "+err.Error(), http.StatusUnauthorized)
-			return
-		}
-		userVerified = true
-		usingJwt = true
-	} else {
-		// 2. 如果用户没有提供JWT，说明App没有(或不支持)通过Deep Link获取到JWT，就用challenge验证用户
-		userID = r.URL.Query().Get("user_id")
-		challenge = r.URL.Query().Get("challenge")
-		//log.Printf("getToken userID: %s", userID)
-		//log.Printf("getToken challenge: %s", challenge)
-		//log.Println(c.challenges)
-		if userID != "" && challenge != "" && c.challenges != nil {
-			if userChallenges, exists := c.challenges[userID]; exists && userChallenges != nil {
-				if _, exists2 := userChallenges[challenge]; exists2 {
-					userVerified = true
-				}
+	// 如果用户没有提供JWT，说明App没有(或不支持)通过Deep Link获取到JWT，就用challenge验证用户
+	userID = r.URL.Query().Get("user_id")
+	challenge = r.URL.Query().Get("challenge")
+	//log.Printf("getToken userID: %s", userID)
+	//log.Printf("getToken challenge: %s", challenge)
+	//log.Println(c.challenges)
+	if userID != "" && challenge != "" && c.challenges != nil {
+		if userChallenges, exists := c.challenges[userID]; exists && userChallenges != nil {
+			if _, exists2 := userChallenges[challenge]; exists2 {
+				userVerified = true
 			}
 		}
 	}
@@ -130,26 +105,12 @@ func (c *AuthController) GetToken(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "get token error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if !usingJwt {
-		// 签发 JWT（有效期 24 小时）
-		var err error
-		jwtToken, err = util.GenerateJWT(userID, 24*time.Hour)
-		if err != nil {
-			http.Error(w, "generate jwt failed", http.StatusInternalServerError)
-		}
-		// challenge只用一次，如果为用户生成了JWT，后续就用JWT验证用户
-		delete(c.challenges[userID], challenge)
-		if len(c.challenges[userID]) == 0 {
-			delete(c.challenges, userID)
-		}
-	}
 	resp := map[string]any{
 		"access_token":  token.AccessToken,
 		"refresh_token": token.RefreshToken,
 		"token_type":    token.TokenType,
 		"expires_in":    token.ExpiresIn,
 		"expiry":        token.Expiry,
-		"jwt":           jwtToken,
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
