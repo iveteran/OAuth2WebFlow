@@ -35,9 +35,6 @@ func (c *AuthController) Authorize(w http.ResponseWriter, r *http.Request) {
 		}
 		c.challenges[userID][challenge] = platform
 	}
-	//log.Printf("auth userID: %s", userID)
-	//log.Printf("auth challenge: %s", challenge)
-	//log.Println(c.challenges)
 
 	url, err := c.Service.GetAuthURL(provider, userID, platform, scheme)
 	if err != nil {
@@ -79,15 +76,10 @@ func (c *AuthController) GetToken(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "provider required", http.StatusBadRequest)
 		return
 	}
-	var userID string
-	var challenge string
 	userVerified := false
 	// 如果用户没有提供JWT，说明App没有(或不支持)通过Deep Link获取到JWT，就用challenge验证用户
-	userID = r.URL.Query().Get("user_id")
-	challenge = r.URL.Query().Get("challenge")
-	//log.Printf("getToken userID: %s", userID)
-	//log.Printf("getToken challenge: %s", challenge)
-	//log.Println(c.challenges)
+	userID := r.URL.Query().Get("user_id")
+	challenge := r.URL.Query().Get("challenge")
 	if userID != "" && challenge != "" && c.challenges != nil {
 		if userChallenges, exists := c.challenges[userID]; exists && userChallenges != nil {
 			if _, exists2 := userChallenges[challenge]; exists2 {
