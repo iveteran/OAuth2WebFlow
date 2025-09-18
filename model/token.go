@@ -39,7 +39,7 @@ func SaveToken(db *sql.DB, t *Token) error {
 func GetToken(db *sql.DB, provider, userID string) (*Token, error) {
 	row := db.QueryRow(`SELECT provider, user_id, refresh_token, updated_at
 	FROM tokens
-	WHERE provider=? AND user_id=?`,
+	WHERE lower(provider)=lower(?) AND lower(user_id)=lower(?)`,
 		provider, userID)
 	t := &Token{}
 	if err := row.Scan(

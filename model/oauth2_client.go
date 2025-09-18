@@ -49,7 +49,7 @@ func GetOAuthClient(db *sql.DB, provider string) (*OAuthClient, error) {
 	row := db.QueryRow(`SELECT provider, client_id, client_secret,
 	redirect_uri, scopes, auth_url, token_url
 	FROM oauth_clients
-	WHERE provider=?`,
+	WHERE lower(provider)=lower(?)`,
 		provider)
 	c := &OAuthClient{}
 	if err := row.Scan(
